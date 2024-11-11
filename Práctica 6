@@ -1,0 +1,75 @@
+Este proyecto se centró en crear un servidor en ESP32 que mostrara los valores de algún sensor de nuestra elección. En este caso se utilizó un giroscopio MPU6050 como sensor y
+un DOIT-Espressif-Devkit-V1 como procesador.
+
+El primer obstáculo que se presentó fue familiarizarse con la plataforma "Arduino Cloud" ya que fue el primer acercamiento con la misma; no obstante, esto fue rápido ya que la platafomra es
+muy intuitiva y fácil de usar.
+
+A continuación se muestra el código usado para este proyecto; este código funciona para Arduino IDE.
+
+#include <WiFi.h>
+#include <Wire.h>
+#include <MPU6050.h>
+#include <WebSocketsServer.h>
+
+// Configuración del punto de acceso
+const char *ssid = "ESP32-AP";
+const char *password = "12345678";
+
+// Instancia del sensor MPU6050 y servidor WebSocket
+MPU6050 mpu;
+WebSocketsServer webSocket = WebSocketsServer(80);
+
+void setup() {
+  Serial.begin(115200);
+
+  // Inicializa el MPU6050
+  Wire.begin();
+  mpu.initialize();
+  if (!mpu.testConnection()) {
+    Serial.println("Error al conectar con el MPU6050");
+    while (1);
+  }
+
+  // Configura el ESP32 como punto de acceso
+  WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("Dirección IP del AP: ");
+  Serial.println(IP);
+
+  // Inicia el servidor WebSocket
+  webSocket.begin();
+  webSocket.onEvent(webSocketEvent);
+}
+
+void loop() {
+  // Llama al servidor WebSocket
+  webSocket.loop();
+
+  // Obtiene los datos del giroscopio y acelerómetro
+  int16_t ax, ay, az, gx, gy, gz;
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  // Formatea los datos en JSON
+  String json = "{";
+  json += "\"ax\":" + String(ax) + ",";
+  json += "\"ay\":" + String(ay) + ",";
+  json += "\"az\":" + String(az) + ",";
+  json += "\"gx\":" + String(gx) + ",";
+  json += "\"gy\":" + String(gy) + ",";
+  json += "\"gz\":" + String(gz);
+  json += "}";
+
+  // Envía los datos a todos los clientes conectados
+  webSocket.broadcastTXT(json);
+
+  // Espera un corto tiempo antes de la siguiente lectura
+  delay(100);  // Puedes ajustar el tiempo de actualización
+}
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+  if (type == WStype_CONNECTED) {
+    Serial.println("Cliente conectado");
+  } else if (type == WStype_DISCONNECTED) {
+    Serial.println("Cliente desconectado");
+  }
+}
